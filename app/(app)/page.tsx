@@ -2,20 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { DaySheet } from "@/app/(app)/day-sheet";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, getToday } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, getToday, scopeFor } from "@/lib/data";
 import { displayPhone } from "@/lib/phone";
-import { formatAgo, formatDayKey } from "@/lib/time";
+import { dateKey, formatAgo, formatDateTime, formatDayKey } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Today" };
 
 type Item = { key: string; tone: "bad" | "warn" | "plain"; title: string; body: string; when?: string; href: string };
 
 export default async function TodayPage() {
-  await requireStaff();
-  const clinic = await getClinic();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
+  const clinic = await getClinic(s);
   const tz = clinic.timezone;
-  const t = await getToday(tz);
+  const t = await getToday(s, tz);
   const now = new Date();
 
   const items: Item[] = [];
@@ -60,11 +62,21 @@ export default async function TodayPage() {
       href: "/appointments?status=confirmed",
     });
   }
+  if (t.clashes.length) {
+    const first = t.clashes[0];
+    items.push({
+      key: "clashes",
+      tone: "warn",
+      title: `${t.clashes.length} booked visit${t.clashes.length === 1 ? " falls" : "s fall"} on a day off or closure`,
+      body: `First: ${first.patient} with Dr. ${first.doctorName}, ${formatDateTime(first.slotTime, tz)}. Move or cancel these visits.`,
+      href: `/appointments?date=${dateKey(first.slotTime, tz)}`,
+    });
+  }
   if (t.errors.length) {
     items.push({
       key: "errors",
       tone: "warn",
-      title: `${t.errors.length} WhatsApp message${t.errors.length === 1 ? "" : "s"} could not be sent in the last day`,
+      title: `${t.errors.length} message${t.errors.length === 1 ? "" : "s"} could not be sent in the last day`,
       body: t.errors[0].error_detail ?? "See Settings for details.",
       when: formatAgo(t.errors[0].created_at, tz, now),
       href: "/settings#problems",
@@ -114,7 +126,7 @@ export default async function TodayPage() {
         )}
       </section>
 
-      <DaySheet doctors={t.doctors} appointments={t.appointments} tz={tz} todayKey={t.key} />
+      <DaySheet doctors={t.doctors} appointments={t.appointments} tz={tz} todayKey={t.key} timeOff={t.timeOff} />
     </div>
   );
 }

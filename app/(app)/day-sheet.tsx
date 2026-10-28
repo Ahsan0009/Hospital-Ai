@@ -2,14 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { AppointmentDrawer } from "@/app/(app)/appointment-drawer";
 import { BookDialog } from "@/app/(app)/book-dialog";
 import { STATUS_LABEL, StatusPill } from "@/app/(app)/ui";
 import { displayPhone } from "@/lib/phone";
-import { formatClock, formatDayKey, formatTime, isoWeekday, minutesInDay, timeToMinutes } from "@/lib/time";
-import type { Appointment, Doctor } from "@/types/db";
+import { formatDayKey, formatTime, isoWeekday, minutesInDay, timeToMinutes } from "@/lib/time";
+import { dayHours, sessionsFor } from "@/lib/schedule";
+import type { Appointment, Doctor, TimeOff } from "@/types/db";
 
 const HOUR = 88;
 
@@ -41,25 +42,27 @@ function useAutoRefresh(ms: number, paused: boolean) {
   }, [ms, paused, router]);
 }
 
-export function DaySheet({ doctors, appointments, tz, todayKey }: { doctors: Doctor[]; appointments: Appointment[]; tz: string; todayKey: string }) {
+export function DaySheet({ doctors, appointments, tz, todayKey, timeOff = [] }: { doctors: Doctor[]; appointments: Appointment[]; tz: string; todayKey: string; timeOff?: TimeOff[] }) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [booking, setBooking] = useState(false);
   const nowMin = useNowMinutes(tz);
   useAutoRefresh(60_000, selectedId !== null || booking);
 
   const weekday = isoWeekday(todayKey);
-  const columns = useMemo(() => {
-    const withVisits = new Set(appointments.map((a) => a.doctor?.id));
-    return doctors.filter((d) => d.working_days.includes(weekday) || withVisits.has(d.id));
-  }, [doctors, appointments, weekday]);
+  const clinicClosed = timeOff.some((o) => o.doctorId === null && todayKey >= o.startsOn && todayKey <= o.endsOn);
+  const awayToday = (id: number) => clinicClosed || timeOff.some((o) => o.doctorId === id && todayKey >= o.startsOn && todayKey <= o.endsOn);
+  const todays = (d: Doctor) => (awayToday(d.id) ? [] : sessionsFor(d.sessions, weekday));
+  const withVisits = new Set(appointments.map((a) => a.doctor?.id));
+  const columns = doctors.filter((d) => sessionsFor(d.sessions, weekday).length > 0 || withVisits.has(d.id));
 
-  const range = useMemo(() => {
+  const range = (() => {
     let lo = Infinity;
     let hi = -Infinity;
     for (const d of columns) {
-      if (!d.working_days.includes(weekday)) continue;
-      lo = Math.min(lo, timeToMinutes(d.start_time));
-      hi = Math.max(hi, timeToMinutes(d.end_time));
+      for (const x of sessionsFor(d.sessions, weekday)) {
+        lo = Math.min(lo, timeToMinutes(x.start));
+        hi = Math.max(hi, timeToMinutes(x.end));
+      }
     }
     for (const a of appointments) {
       const m = minutesInDay(a.slot_time, tz);
@@ -68,7 +71,7 @@ export function DaySheet({ doctors, appointments, tz, todayKey }: { doctors: Doc
     }
     if (!Number.isFinite(lo)) return { start: 9 * 60, end: 17 * 60 };
     return { start: Math.floor(lo / 60) * 60, end: Math.min(24 * 60, Math.ceil(hi / 60) * 60) };
-  }, [columns, appointments, tz, weekday]);
+  })();
 
   const px = (min: number) => ((min - range.start) / 60) * HOUR;
   const height = px(range.end);
@@ -118,7 +121,7 @@ export function DaySheet({ doctors, appointments, tz, todayKey }: { doctors: Doc
                   <strong>Dr. {d.name}</strong>
                   <span>
                     {d.department}
-                    {d.working_days.includes(weekday) ? `, ${formatClock(d.start_time)} to ${formatClock(d.end_time)}` : ", not on today's rota"}
+                    {awayToday(d.id) ? (clinicClosed ? ", clinic closed today" : ", away today") : todays(d).length ? `, ${dayHours(todays(d))}` : ", not on today's rota"}
                   </span>
                 </div>
               ))}
@@ -132,17 +135,23 @@ export function DaySheet({ doctors, appointments, tz, todayKey }: { doctors: Doc
               </div>
 
               {columns.map((d, ci) => {
-                const works = d.working_days.includes(weekday);
-                const s = timeToMinutes(d.start_time);
-                const e = timeToMinutes(d.end_time);
+                // Shade everything outside today's sittings (or the whole column when away).
+                const gaps: [number, number][] = [];
+                let cursor = range.start;
+                for (const x of todays(d)) {
+                  const a = timeToMinutes(x.start);
+                  if (a > cursor) gaps.push([cursor, a]);
+                  cursor = Math.max(cursor, timeToMinutes(x.end));
+                }
+                if (cursor < range.end) gaps.push([cursor, range.end]);
                 const visits = appointments
                   .filter((a) => a.doctor?.id === d.id)
                   .sort((a, b) => Number(a.status !== "cancelled") - Number(b.status !== "cancelled"));
                 return (
                   <div key={d.id} className="sheet-col" role="group" aria-label={`Dr. ${d.name}`}>
-                    {!works ? <div className="sheet-off" style={{ top: 0, height }} /> : null}
-                    {works && s > range.start ? <div className="sheet-off" style={{ top: 0, height: px(s) }} /> : null}
-                    {works && e < range.end ? <div className="sheet-off" style={{ top: px(e), height: height - px(e) }} /> : null}
+                    {gaps.map(([a, b]) => (
+                      <div key={a} className="sheet-off" style={{ top: px(a), height: px(b) - px(a) }} />
+                    ))}
                     {showNow ? (
                       <div className={`now-line${ci === 0 ? " lead" : ""}`} style={{ top: px(nowMin ?? 0) }} aria-hidden="true">
                         {ci === columns.length - 1 ? <span className="now-label">Now</span> : null}

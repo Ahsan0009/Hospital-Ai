@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { StaffView } from "@/app/(app)/staff/staff-view";
-import { requireStaff } from "@/lib/auth";
-import { getClinic } from "@/lib/data";
-import { listStaffUsers } from "@/lib/staff-users";
+import { getStaff } from "@/lib/auth";
+import { getClinic, scopeFor } from "@/lib/data";
+import { listClinicStaff } from "@/lib/staff-users";
 
 export const metadata: Metadata = { title: "Staff" };
 
 export default async function StaffPage() {
-  const me = await requireStaff();
+  const me = await getStaff();
+  if (!me) return null; // the layout shows sign-in, paused or no-access
   if (me.role !== "admin") {
     return (
       <div className="page-stack">
@@ -20,6 +21,7 @@ export default async function StaffPage() {
       </div>
     );
   }
-  const [clinic, users] = await Promise.all([getClinic(), listStaffUsers()]);
+  const s = await scopeFor(me);
+  const [clinic, users] = await Promise.all([getClinic(s), listClinicStaff(s)]);
   return <StaffView users={users} meId={me.id} tz={clinic.timezone} />;
 }

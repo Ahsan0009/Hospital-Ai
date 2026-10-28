@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;
-  const reason = params.reason === "no-access" ? "no-access" : null;
+  const reason = params.reason === "no-access" ? "no-access" : params.reason === "link-expired" ? "link-expired" : null;
   return (
     <main className="login-page">
       <aside className="login-aside">

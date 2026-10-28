@@ -40,7 +40,7 @@ export function Shell({
   children,
 }: {
   clinic: Clinic;
-  staff: { email: string; role: "admin" | "staff" };
+  staff: { email: string; role: "admin" | "staff"; clinicName: string };
   counts: { openHandoffs: number; urgentHandoffs: number };
   children: ReactNode;
 }) {

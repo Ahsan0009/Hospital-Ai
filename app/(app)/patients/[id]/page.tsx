@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChannelSelect } from "@/app/(app)/patients/[id]/channel-select";
 import { PatientActions } from "@/app/(app)/patients/[id]/patient-actions";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, getPatient, listDoctors } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, getPatient, listDoctors, scopeFor } from "@/lib/data";
 import { displayPhone, safeLink } from "@/lib/phone";
 import { dateKey, formatAgo, formatDateTime, nowMs } from "@/lib/time";
 
@@ -12,11 +13,13 @@ export const metadata: Metadata = { title: "Patient" };
 const LABEL = { confirmed: "Booked", completed: "Seen", no_show: "Missed", cancelled: "Cancelled" } as const;
 
 export default async function PatientPage({ params }: PageProps<"/patients/[id]">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const { id } = await params;
   const pid = Number(id);
   if (!Number.isInteger(pid) || pid <= 0) notFound();
-  const [clinic, data, doctors] = await Promise.all([getClinic(), getPatient(pid), listDoctors({ activeOnly: true })]);
+  const [clinic, data, doctors] = await Promise.all([getClinic(s), getPatient(s, pid), listDoctors(s, { activeOnly: true })]);
   if (!data) notFound();
   const tz = clinic.timezone;
   const { patient, appointments, reports, feedback, handoffs } = data;
@@ -33,8 +36,9 @@ export default async function PatientPage({ params }: PageProps<"/patients/[id]"
           </p>
           <h1>{patient.name || displayPhone(patient.phone)}</h1>
           <p>
-            {displayPhone(patient.phone)}. {patient.last_message_at ? `Last messaged ${formatAgo(patient.last_message_at, tz)}.` : "Has not messaged on WhatsApp yet."}
+            {displayPhone(patient.phone)}. {patient.last_message_at ? `Last messaged ${formatAgo(patient.last_message_at, tz)}.` : "Has not messaged the clinic yet."}
           </p>
+          {clinic.smsEnabled ? <ChannelSelect patientId={patient.id} channel={patient.channel === "sms" ? "sms" : "whatsapp"} optedOut={patient.sms_opt_out === true} /> : null}
         </div>
         <div className="page-actions">
           <PatientActions patient={patient} doctors={doctors} todayKey={dateKey(new Date(), tz)} />

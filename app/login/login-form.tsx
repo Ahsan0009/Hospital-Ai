@@ -1,18 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, LockKeyhole, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-const NO_ACCESS = "This account is not set up for the clinic dashboard. Ask the clinic admin to give it staff access.";
+const NO_ACCESS = "This account is not linked to a clinic. Ask your clinic admin to add you.";
 
-export function LoginForm({ reason }: { reason: "no-access" | null }) {
+export function LoginForm({ reason }: { reason: "no-access" | "link-expired" | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(reason === "no-access" ? NO_ACCESS : "");
+  const [error, setError] = useState(reason === "no-access" ? NO_ACCESS : reason === "link-expired" ? "That link has expired or was already used. Ask for a new one below." : "");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -26,17 +27,12 @@ export function LoginForm({ reason }: { reason: "no-access" | null }) {
     setSubmitting(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (signInError) {
         setError(signInError.message === "Invalid login credentials" ? "That email and password do not match. Check both and try again." : signInError.message);
         return;
       }
-      const role = data.user?.app_metadata?.role;
-      if (role !== "admin" && role !== "staff") {
-        await supabase.auth.signOut();
-        setError(NO_ACCESS);
-        return;
-      }
+      // The server decides where each account goes: clinic dashboard, owner console, or back here.
       router.replace("/");
       router.refresh();
     } catch {
@@ -79,6 +75,7 @@ export function LoginForm({ reason }: { reason: "no-access" | null }) {
           "Sign in"
         )}
       </button>
+      <Link className="text-link small" href="/forgot-password">Forgot your password?</Link>
     </form>
   );
 }

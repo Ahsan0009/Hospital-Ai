@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Stars } from "@/app/(app)/ui";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listFeedback } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listFeedback, scopeFor } from "@/lib/data";
 import { displayPhone, whatsappLink } from "@/lib/phone";
 import { daysAgoIso, formatDay, formatDateTime } from "@/lib/time";
 
@@ -11,11 +11,13 @@ export const metadata: Metadata = { title: "Feedback" };
 const PERIODS = { "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days" } as const;
 
 export default async function FeedbackPage({ searchParams }: PageProps<"/feedback">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const params = await searchParams;
   const period = (Object.keys(PERIODS) as (keyof typeof PERIODS)[]).includes(params.days as keyof typeof PERIODS) ? (params.days as keyof typeof PERIODS) : "30";
   const since = daysAgoIso(Number(period));
-  const [clinic, rows] = await Promise.all([getClinic(), listFeedback(since)]);
+  const [clinic, rows] = await Promise.all([getClinic(s), listFeedback(s, since)]);
   const tz = clinic.timezone;
 
   const rated = rows.filter((r) => r.rating !== null) as (typeof rows[number] & { rating: number })[];

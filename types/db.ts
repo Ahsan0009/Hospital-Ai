@@ -1,5 +1,8 @@
 export type AppointmentStatus = "confirmed" | "completed" | "no_show" | "cancelled";
 
+/** One sitting of a doctor on a weekday (1 = Monday … 7 = Sunday), times as HH:MM. */
+export type Session = { weekday: number; start: string; end: string };
+
 export type Doctor = {
   id: number;
   name: string;
@@ -11,7 +14,20 @@ export type Doctor = {
   slot_minutes: number;
   active: boolean;
   notes: string | null;
+  sessions: Session[];
 };
+
+/** A doctor's days off, or a whole-clinic closure when doctorId is null. Dates are YYYY-MM-DD. */
+export type TimeOff = {
+  id: number;
+  doctorId: number | null;
+  doctorName: string | null;
+  startsOn: string;
+  endsOn: string;
+  reason: string | null;
+};
+
+export type Channel = "whatsapp" | "sms";
 
 export type PatientRef = { id: number; name: string | null; phone: string };
 export type DoctorRef = { id: number; name: string; department: string; slot_minutes: number };
@@ -37,6 +53,8 @@ export type Patient = {
   name: string | null;
   last_message_at: string | null;
   created_at: string;
+  channel?: Channel;
+  sms_opt_out?: boolean;
 };
 
 export type Handoff = {
@@ -75,6 +93,20 @@ export type Feedback = {
 export type ErrorLog = { id: number; source: string | null; patient_phone: string | null; error_detail: string | null; created_at: string };
 export type Activity = { id: number; staff_email: string; action: string; detail: string | null; created_at: string };
 
-export type Clinic = { name: string; timezone: string };
+export type Clinic = {
+  id: string;
+  name: string;
+  timezone: string;
+  contactPhone: string | null;
+  alertEmail: string | null;
+  googleReviewLink: string | null;
+  whatsappNumber: string | null;
+  remind24h: boolean;
+  remind2h: boolean;
+  askFeedback: boolean;
+  smsEnabled: boolean;
+  smsNumber: string | null;
+  preferredChannel: Channel;
+};
 
 export type ActionResult<T = undefined> = { ok: true; message?: string; data?: T } | { ok: false; error: string };

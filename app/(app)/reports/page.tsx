@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listReports } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listReports, scopeFor } from "@/lib/data";
 import { displayPhone, safeLink } from "@/lib/phone";
 import { formatDateTime } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Reports" };
 
 export default async function ReportsPage({ searchParams }: PageProps<"/reports">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const params = await searchParams;
   const critical = params.critical === "1";
-  const [clinic, reports] = await Promise.all([getClinic(), listReports({ criticalOnly: critical })]);
+  const [clinic, reports] = await Promise.all([getClinic(s), listReports(s, { criticalOnly: critical })]);
   const tz = clinic.timezone;
 
   return (
@@ -19,7 +21,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
       <div className="page-heading">
         <div>
           <h1>Reports</h1>
-          <p>Lab reports sent in by the lab system. Patients get a WhatsApp message that the report is ready; critical ones are also emailed to the clinic.</p>
+          <p>Lab reports sent in by the lab system. Patients get a message that the report is ready; critical ones are also emailed to the clinic.</p>
         </div>
       </div>
       <section className="panel">

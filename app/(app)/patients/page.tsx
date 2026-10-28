@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PatientSearch } from "@/app/(app)/patients/patient-search";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listPatients } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listPatients, scopeFor } from "@/lib/data";
 import { displayPhone } from "@/lib/phone";
 import { formatAgo, formatDateTime, formatDay } from "@/lib/time";
 
@@ -11,11 +11,13 @@ export const metadata: Metadata = { title: "Patients" };
 const PAGE = 25;
 
 export default async function PatientsPage({ searchParams }: PageProps<"/patients">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q : "";
   const page = Math.max(0, Number(params.page) || 0);
-  const [clinic, { rows, total }] = await Promise.all([getClinic(), listPatients({ q, page, pageSize: PAGE })]);
+  const [clinic, { rows, total }] = await Promise.all([getClinic(s), listPatients(s, { q, page, pageSize: PAGE })]);
   const tz = clinic.timezone;
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const link = (p: number) => `/patients?${new URLSearchParams({ ...(q ? { q } : {}), ...(p ? { page: String(p) } : {}) })}`;
@@ -41,7 +43,7 @@ export default async function PatientsPage({ searchParams }: PageProps<"/patient
               <thead>
                 <tr>
                   <th>Patient</th>
-                  <th>Last WhatsApp message</th>
+                  <th>Last message</th>
                   <th>Next visit</th>
                   <th>Last seen</th>
                   <th>Visits</th>
@@ -68,7 +70,7 @@ export default async function PatientsPage({ searchParams }: PageProps<"/patient
         ) : (
           <div className="empty-state">
             <strong>{q ? "No patient matches that search" : "No patients yet"}</strong>
-            <span>{q ? "Try part of the name, or the last digits of the number." : "Patients appear here after their first WhatsApp message."}</span>
+            <span>{q ? "Try part of the name, or the last digits of the number." : "Patients appear here after their first message or booking."}</span>
           </div>
         )}
         {pages > 1 ? (

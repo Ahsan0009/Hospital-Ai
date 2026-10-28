@@ -9,13 +9,13 @@ import { EmptyState, Flash, Modal, PageHeading, Spinner } from "@/app/(app)/ui";
 import { formatAgo, formatDay } from "@/lib/time";
 import type { ActionResult } from "@/types/db";
 
-type User = { id: string; email: string; role: "admin" | "staff" | null; createdAt: string; lastSignInAt: string | null };
+type User = { id: string; email: string; role: "admin" | "staff"; createdAt: string; lastSignInAt: string | null };
 type Dialog = { kind: "add" } | { kind: "password"; user: User } | { kind: "delete"; user: User } | null;
 
 const ROLE_HELP = [
   ["Clinic admin", "Everything the front desk can do, plus doctors and their hours, clinic settings, and staff accounts."],
   ["Front desk", "Today, appointments, handoffs, patients, reports and feedback. Can book, move, cancel and mark visits, and close handoffs."],
-  ["No access", "The account exists but cannot open the dashboard."],
+  ["Removing someone", "Delete their account. They are signed out of the dashboard on their next click."],
 ];
 
 function tempPassword(): string {
@@ -82,13 +82,12 @@ export function StaffView({ users, meId, tz }: { users: User[]; meId: string; tz
                         <select
                           className="select"
                           aria-label={`Access for ${u.email}`}
-                          value={u.role ?? "none"}
+                          value={u.role}
                           disabled={me || busy === u.id}
                           onChange={(e) => act(u.id, () => setStaffRole(u.id, e.target.value))}
                         >
                           <option value="admin">Clinic admin</option>
                           <option value="staff">Front desk</option>
-                          <option value="none">No access</option>
                         </select>
                       </td>
                       <td className="soft">{u.lastSignInAt ? formatAgo(u.lastSignInAt, tz) : "Never"}</td>
@@ -138,7 +137,7 @@ export function StaffView({ users, meId, tz }: { users: User[]; meId: string; tz
 
       {dialog?.kind === "delete" ? (
         <Modal title="Delete account" description={dialog.user.email} onClose={() => setDialog(null)}>
-          <p>This person will no longer be able to sign in. Their past changes stay in the activity log. To keep the account but block it, set its access to No access instead.</p>
+          <p>This person will no longer be able to sign in. Their past changes stay in the activity log.</p>
           {result && !result.ok ? <Flash result={result} /> : null}
           <div className="dialog-actions">
             <button className="button-secondary" type="button" onClick={() => setDialog(null)}>Keep account</button>

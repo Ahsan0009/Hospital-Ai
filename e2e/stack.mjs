@@ -34,10 +34,17 @@ export const ANON_KEY = sign({ role: "anon", iss: "e2e", exp: far });
 export const SERVICE_KEY = sign({ role: "service_role", iss: "e2e", exp: far });
 
 export const USERS = [
-  { email: "admin@clinic.test", password: "admin-pass-1234", role: "admin" },
-  { email: "desk@clinic.test", password: "desk-pass-12345", role: "staff" },
-  { email: "patient@clinic.test", password: "nope-pass-12345", role: null },
+  { email: "admin@clinic.test", password: "admin-pass-1234", role: null },     // clinic A admin (staff_members)
+  { email: "desk@clinic.test", password: "desk-pass-12345", role: null },      // clinic A front desk
+  { email: "patient@clinic.test", password: "nope-pass-12345", role: null },   // no clinic
+  { email: "admin@valley.test", password: "valley-pass-1234", role: null },    // clinic B admin
+  { email: "admin@paused.test", password: "paused-pass-1234", role: null },    // suspended clinic C
+  { email: "owner@platform.test", password: "owner-pass-12345", role: "operator" }, // platform owner (in OPERATOR_EMAILS)
+  { email: "rogue@clinic.test", password: "rogue-pass-12345", role: "operator" },   // operator flag but not allow-listed
 ].map((u, i) => ({ ...u, id: `00000000-0000-4000-8000-00000000000${i + 1}` }));
+
+/** Password-reset tokens "emailed" by the fake /recover endpoint: token_hash -> { id, email, redirectTo }. */
+export const RECOVERY = new Map();
 
 function userObject(u) {
   return {
@@ -91,6 +98,21 @@ async function auth(req, res, path) {
     return send(res, 200, userObject(u));
   }
   if (path === "/logout") return send(res, 204);
+  if (path === "/recover" && req.method === "POST") {
+    // Real Supabase emails a link; the tests read the token from RECOVERY instead.
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const u = USERS.find((x) => x.email === String(body.email).toLowerCase());
+    if (u) RECOVERY.set(crypto.randomBytes(16).toString("hex"), { id: u.id, email: u.email, redirectTo: url.searchParams.get("redirect_to") });
+    return send(res, 200, {});
+  }
+  if (path === "/verify" && req.method === "POST") {
+    const body = JSON.parse((await readBody(req)) || "{}");
+    const hit = body.type === "recovery" && RECOVERY.get(body.token_hash);
+    const u = hit && USERS.find((x) => x.id === hit.id);
+    if (!u) return send(res, 403, { code: 403, error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+    RECOVERY.delete(body.token_hash);
+    return send(res, 200, session(u));
+  }
 
   // ---- admin API (service-role key only) ----
   if (path.startsWith("/admin/users")) {

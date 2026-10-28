@@ -1,17 +1,20 @@
 import type { Metadata } from "next";
 import { ChangePassword } from "@/app/(app)/settings/change-password";
 import { SettingsForm } from "@/app/(app)/settings/settings-form";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listActivity, listRecentErrors } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listActivity, listRecentErrors, scopeFor } from "@/lib/data";
 import { displayPhone } from "@/lib/phone";
 import { daysAgoIso, formatAgo } from "@/lib/time";
+import { timeZoneOptions } from "@/lib/timezones";
 
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const staff = await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const since = daysAgoIso(7);
-  const [clinic, errors, activity] = await Promise.all([getClinic(), listRecentErrors(since, 30), listActivity(30)]);
+  const [clinic, errors, activity] = await Promise.all([getClinic(s), listRecentErrors(s, since, 30), listActivity(s, 30)]);
   const tz = clinic.timezone;
 
   return (
@@ -27,11 +30,11 @@ export default async function SettingsPage() {
         <div className="panel-heading">
           <div>
             <h2>Clinic</h2>
-            <p>The name shown here and the time zone every date and time is shown in.</p>
+            <p>Clinic details, the time zone every date and time is shown in, and which automatic messages patients get.</p>
           </div>
         </div>
         <div className="panel-body">
-          <SettingsForm clinic={clinic} canEdit={staff.role === "admin"} />
+          <SettingsForm clinic={clinic} canEdit={staff.role === "admin"} zones={timeZoneOptions()} />
         </div>
       </section>
 
@@ -51,7 +54,7 @@ export default async function SettingsPage() {
         <div className="panel-heading">
           <div>
             <h2>Message problems</h2>
-            <p>WhatsApp messages that could not be sent in the last 7 days, usually because a template is not approved yet or a number is not on WhatsApp.</p>
+            <p>Messages that could not be sent in the last 7 days, usually because a WhatsApp template is not approved yet, a number is not on WhatsApp, or a patient opted out of texts.</p>
           </div>
           <span className="count-tag">{errors.length}</span>
         </div>

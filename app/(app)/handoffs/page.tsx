@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HandoffList } from "@/app/(app)/handoffs/handoff-list";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listHandoffs } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listHandoffs, scopeFor } from "@/lib/data";
 
 export const metadata: Metadata = { title: "Handoffs" };
 
 export default async function HandoffsPage({ searchParams }: PageProps<"/handoffs">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const params = await searchParams;
   const closed = params.show === "closed";
-  const [clinic, open, done] = await Promise.all([getClinic(), listHandoffs(false), listHandoffs(true, closed ? 100 : 1)]);
+  const [clinic, open, done] = await Promise.all([getClinic(s), listHandoffs(s, false), listHandoffs(s, true, closed ? 100 : 1)]);
 
   return (
     <div className="page-stack">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AppointmentsView } from "@/app/(app)/appointments/appointments-view";
-import { requireStaff } from "@/lib/auth";
-import { getClinic, listAppointments, listDoctors } from "@/lib/data";
+import { getStaff } from "@/lib/auth";
+import { getClinic, listAppointments, listDoctors, scopeFor } from "@/lib/data";
 import { addDays, dateKey, isDateKey } from "@/lib/time";
 import type { AppointmentStatus } from "@/types/db";
 
@@ -10,9 +10,11 @@ export const metadata: Metadata = { title: "Appointments" };
 const STATUSES = ["all", "confirmed", "completed", "no_show", "cancelled"] as const;
 
 export default async function AppointmentsPage({ searchParams }: PageProps<"/appointments">) {
-  await requireStaff();
+  const staff = await getStaff();
+  if (!staff) return null; // the layout shows sign-in, paused or no-access
+  const s = await scopeFor(staff);
   const params = await searchParams;
-  const clinic = await getClinic();
+  const clinic = await getClinic(s);
   const tz = clinic.timezone;
   const today = dateKey(new Date(), tz);
   const date = isDateKey(params.date) ? params.date : today;
@@ -22,8 +24,8 @@ export default async function AppointmentsPage({ searchParams }: PageProps<"/app
   const q = typeof params.q === "string" ? params.q.slice(0, 60) : "";
 
   const [doctors, all] = await Promise.all([
-    listDoctors(),
-    listAppointments({ from: date, days: range === "week" ? 7 : 1, tz, doctorId }),
+    listDoctors(s),
+    listAppointments(s, { from: date, days: range === "week" ? 7 : 1, tz, doctorId }),
   ]);
   const term = q.toLowerCase().trim();
   const digits = term.replace(/\D/g, "");
